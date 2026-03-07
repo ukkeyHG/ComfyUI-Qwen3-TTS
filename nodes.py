@@ -397,6 +397,20 @@ class Qwen3Loader:
         except Exception as e:
             print(f"DEBUG: Error during deep speaker injection: {e}", flush=True)
         
+
+        # tts_model_typeを強制的にbaseに上書き
+        try:
+            if hasattr(model, "model"):
+                inner = model.model
+                if hasattr(inner, "tts_model_type"):
+                    inner.tts_model_type = "base"
+                    print(f"DEBUG: Force set tts_model_type = base on inner model", flush=True)
+                if hasattr(inner, "config") and hasattr(inner.config, "tts_model_type"):
+                    inner.config.tts_model_type = "base"
+        except Exception as e:
+            print(f"DEBUG: Could not force tts_model_type: {e}", flush=True)
+
+
         return (model,)
 
 
