@@ -323,13 +323,19 @@ class Qwen3Loader:
         )
 
         if checkpoint_path:
-            ckpt_weights = os.path.join(checkpoint_path, "pytorch_model.bin")
-            if os.path.exists(ckpt_weights):
-                state_dict = torch.load(ckpt_weights, map_location="cpu")
+            ckpt_safetensors = os.path.join(checkpoint_path, "model.safetensors")
+            ckpt_bin = os.path.join(checkpoint_path, "pytorch_model.bin")
+            if os.path.exists(ckpt_safetensors):
+                from safetensors.torch import load_file
+                state_dict = load_file(ckpt_safetensors, device="cpu")
                 model.model.load_state_dict(state_dict, strict=False)
-                print(f"Loaded checkpoint weights from {ckpt_weights}")
+                print(f"Loaded checkpoint weights from {ckpt_safetensors}")
+            elif os.path.exists(ckpt_bin):
+                state_dict = torch.load(ckpt_bin, map_location="cpu")
+                model.model.load_state_dict(state_dict, strict=False)
+                print(f"Loaded checkpoint weights from {ckpt_bin}")
             else:
-                raise ValueError(f"Checkpoint weights not found: {ckpt_weights}")
+                raise ValueError(f"Checkpoint weights not found in {checkpoint_path} (looked for model.safetensors and pytorch_model.bin)")
 
         # FORCE SPEAKER MAPPING FIX - Deep Injection
         try:
@@ -397,20 +403,6 @@ class Qwen3Loader:
         except Exception as e:
             print(f"DEBUG: Error during deep speaker injection: {e}", flush=True)
         
-
-        # tts_model_typeを強制的にbaseに上書き
-        try:
-            if hasattr(model, "model"):
-                inner = model.model
-                if hasattr(inner, "tts_model_type"):
-                    inner.tts_model_type = "base"
-                    print(f"DEBUG: Force set tts_model_type = base on inner model", flush=True)
-                if hasattr(inner, "config") and hasattr(inner.config, "tts_model_type"):
-                    inner.config.tts_model_type = "base"
-        except Exception as e:
-            print(f"DEBUG: Could not force tts_model_type: {e}", flush=True)
-
-
         return (model,)
 
 
@@ -435,18 +427,22 @@ class Qwen3CustomVoice:
                 "instruct": ("STRING", {"multiline": True, "default": ""}),
                 "custom_speaker_name": ("STRING", {"default": ""}),
                 "max_new_tokens": ("INT", {"default": 2048, "min": 64, "max": 8192, "step": 64}),
+                "temperature": ("FLOAT", {"default": 0.9, "min": 0.1, "max": 2.0, "step": 0.05}),
+                "top_k": ("INT", {"default": 50, "min": 1, "max": 200, "step": 1}),
+                "top_p": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 1.0, "step": 0.05}),
+                "repetition_penalty": ("FLOAT", {"default": 1.05, "min": 1.0, "max": 2.0, "step": 0.05}),
             }
         }
     
     @classmethod
-    def IS_CHANGED(s, model, text, language, speaker, seed, instruct="", custom_speaker_name="", max_new_tokens=8192):
+    def IS_CHANGED(s, model, text, language, speaker, seed, instruct="", custom_speaker_name="", max_new_tokens=8192, temperature=0.9, top_k=50, top_p=1.0, repetition_penalty=1.05):
         return seed
 
     RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
     CATEGORY = "Qwen3-TTS"
 
-    def generate(self, model, text, language, speaker, seed, instruct="", custom_speaker_name="", max_new_tokens=8192):
+    def generate(self, model, text, language, speaker, seed, instruct="", custom_speaker_name="", max_new_tokens=8192, temperature=0.9, top_k=50, top_p=1.0, repetition_penalty=1.05):
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
@@ -478,13 +474,27 @@ class Qwen3CustomVoice:
         except Exception as e:
             print(f"DEBUG: Speaker case-matching failed: {e}", flush=True)
 
+        # Custom Voice呼び出し前にtts_model_typeを動的にcustom_voiceに設定
+        if hasattr(model, "model") and hasattr(model.model, "tts_model_type"):
+            model.model.tts_model_type = "custom_voice"
+            print("DEBUG: Set tts_model_type = custom_voice for Custom Voice generation", flush=True)
+
         try:
             wavs, sr = model.generate_custom_voice(
                 text=text,
                 language=lang,
                 speaker=target_speaker,
                 instruct=inst,
-                max_new_tokens=max_new_tokens
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                subtalker_dosample=True,
+                subtalker_temperature=temperature,
+                subtalker_top_k=top_k,
+                subtalker_top_p=top_p,
             )
         except ValueError as e:
             # Catch model type mismatch errors from qwen-tts
@@ -726,18 +736,22 @@ class Qwen3VoiceClone:
                 "prompt": ("QWEN3_PROMPT",),
                 "max_new_tokens": ("INT", {"default": 2048, "min": 64, "max": 8192, "step": 64}),
                 "ref_audio_max_seconds": ("FLOAT", {"default": 30.0, "min": -1.0, "max": 120.0, "step": 5.0}),
+                "temperature": ("FLOAT", {"default": 0.9, "min": 0.1, "max": 2.0, "step": 0.05}),
+                "top_k": ("INT", {"default": 50, "min": 1, "max": 200, "step": 1}),
+                "top_p": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 1.0, "step": 0.05}),
+                "repetition_penalty": ("FLOAT", {"default": 1.05, "min": 1.0, "max": 2.0, "step": 0.05}),
             }
         }
     
     @classmethod
-    def IS_CHANGED(s, model, text, seed, language="Auto", ref_audio=None, ref_text=None, prompt=None, max_new_tokens=2048, ref_audio_max_seconds=30.0):
+    def IS_CHANGED(s, model, text, seed, language="Auto", ref_audio=None, ref_text=None, prompt=None, max_new_tokens=2048, ref_audio_max_seconds=30.0, temperature=0.9, top_k=50, top_p=1.0, repetition_penalty=1.05):
         return seed
 
     RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
     CATEGORY = "Qwen3-TTS"
 
-    def generate(self, model, text, seed, language="Auto", ref_audio=None, ref_text=None, prompt=None, max_new_tokens=2048, ref_audio_max_seconds=30.0):
+    def generate(self, model, text, seed, language="Auto", ref_audio=None, ref_text=None, prompt=None, max_new_tokens=2048, ref_audio_max_seconds=30.0, temperature=0.9, top_k=50, top_p=1.0, repetition_penalty=1.05):
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
@@ -746,6 +760,11 @@ class Qwen3VoiceClone:
         wavs = None
         sr = 0
         
+        # Voice Clone呼び出し前にtts_model_typeを動的にbaseに設定
+        if hasattr(model, "model") and hasattr(model.model, "tts_model_type"):
+            model.model.tts_model_type = "base"
+            print("DEBUG: Set tts_model_type = base for Voice Clone generation", flush=True)
+
         try:
             if prompt is not None:
                 # Use pre-calculated prompt
@@ -753,7 +772,16 @@ class Qwen3VoiceClone:
                     text=text,
                     language=lang,
                     voice_clone_prompt=prompt,
-                    max_new_tokens=max_new_tokens
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
+                    subtalker_dosample=True,
+                    subtalker_temperature=temperature,
+                    subtalker_top_k=top_k,
+                    subtalker_top_p=top_p,
                 )
             elif ref_audio is not None and ref_text is not None and ref_text.strip() != "":
                 # Use on-the-fly prompt creation
@@ -773,7 +801,16 @@ class Qwen3VoiceClone:
                     language=lang,
                     ref_audio=audio_tuple,
                     ref_text=ref_text,
-                    max_new_tokens=max_new_tokens
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
+                    subtalker_dosample=True,
+                    subtalker_temperature=temperature,
+                    subtalker_top_k=top_k,
+                    subtalker_top_p=top_p,
                 )
             else:
                  raise ValueError("For Voice Clone, you must provide either 'prompt' OR ('ref_audio' AND 'ref_text').")
@@ -1194,13 +1231,19 @@ class Qwen3FineTune:
 
                 # Load training weights (includes speaker_encoder) if resuming
                 if resume_checkpoint_path:
-                    ckpt_weights = os.path.join(resume_checkpoint_path, "pytorch_model.bin")
-                    if os.path.exists(ckpt_weights):
-                        state_dict = torch.load(ckpt_weights, map_location="cpu")
+                    ckpt_safetensors = os.path.join(resume_checkpoint_path, "model.safetensors")
+                    ckpt_bin = os.path.join(resume_checkpoint_path, "pytorch_model.bin")
+                    if os.path.exists(ckpt_safetensors):
+                        from safetensors.torch import load_file
+                        state_dict = load_file(ckpt_safetensors, device="cpu")
                         qwen3tts.model.load_state_dict(state_dict, strict=False)
-                        print(f"Loaded training weights from {ckpt_weights}")
+                        print(f"Loaded training weights from {ckpt_safetensors}")
+                    elif os.path.exists(ckpt_bin):
+                        state_dict = torch.load(ckpt_bin, map_location="cpu")
+                        qwen3tts.model.load_state_dict(state_dict, strict=False)
+                        print(f"Loaded training weights from {ckpt_bin}")
                     else:
-                        print(f"Warning: Training checkpoint not found at {ckpt_weights}, using model.safetensors weights")
+                        print(f"Warning: Training checkpoint not found, using model.safetensors weights")
 
                 # FORCE GRADIENTS ON
                 qwen3tts.model.train()

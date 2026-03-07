@@ -7,6 +7,25 @@ A ComfyUI custom node suite for [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
     <img src="https://raw.githubusercontent.com/DarioFT/ComfyUI-Qwen3-TTS/refs/heads/main/assets/intro.png"/>
 <p>
 
+## Changelog
+
+### 2026-03-07 (ukkeyHG fork)
+
+- **Fix: Fine-tuned model support for Voice Clone**
+  - `tts_model_type` is now dynamically switched at generation time instead of being forced at load time
+  - Custom Voice and Voice Clone can now both be used with the same fine-tuned model without conflicts
+
+- **Fix: `safetensors` checkpoint loading support**
+  - Loader now detects `model.safetensors` first, then falls back to `pytorch_model.bin`
+  - Eliminates the need to convert `.safetensors` to `.bin` format (saves ~4GB disk space)
+  - Applies to both inference loading and training resume
+
+- **Feature: Generation parameters exposed in Custom Voice and Voice Clone nodes**
+  - Added `temperature`, `top_k`, `top_p`, `repetition_penalty` to both nodes
+  - `subtalker_*` parameters automatically mirror the main parameters for simplicity
+
+---
+
 ## Features
 
 - **ComfyUI Model Folder Integration**: Models are stored in `ComfyUI/models/Qwen3-TTS/`, keeping your models organized alongside other ComfyUI models.
