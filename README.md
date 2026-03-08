@@ -7,25 +7,6 @@ A ComfyUI custom node suite for [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
     <img src="https://raw.githubusercontent.com/DarioFT/ComfyUI-Qwen3-TTS/refs/heads/main/assets/intro.png"/>
 <p>
 
-## Changelog
-
-### 2026-03-07 (ukkeyHG fork)
-
-- **Fix: Fine-tuned model support for Voice Clone**
-  - `tts_model_type` is now dynamically switched at generation time instead of being forced at load time
-  - Custom Voice and Voice Clone can now both be used with the same fine-tuned model without conflicts
-
-- **Fix: `safetensors` checkpoint loading support**
-  - Loader now detects `model.safetensors` first, then falls back to `pytorch_model.bin`
-  - Eliminates the need to convert `.safetensors` to `.bin` format (saves ~4GB disk space)
-  - Applies to both inference loading and training resume
-
-- **Feature: Generation parameters exposed in Custom Voice and Voice Clone nodes**
-  - Added `temperature`, `top_k`, `top_p`, `repetition_penalty` to both nodes
-  - `subtalker_*` parameters automatically mirror the main parameters for simplicity
-
----
-
 ## Features
 
 - **ComfyUI Model Folder Integration**: Models are stored in `ComfyUI/models/Qwen3-TTS/`, keeping your models organized alongside other ComfyUI models.
@@ -34,6 +15,7 @@ A ComfyUI custom node suite for [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
   - **Custom Voice**: Use 9 preset high-quality voices (Vivian, Ryan, etc.).
   - **Voice Design**: Create new voices using natural language descriptions.
   - **Voice Cloning**: Clone voices from a short reference audio clip.
+  - **Instruct Selector**: Choose from 28 built-in instruct presets for Custom Voice and Voice Design.
 - **Fine-Tuning**: Train a custom voice model using your own dataset (folder of .wav + .txt files).
   - Resume training from checkpoints
   - VRAM optimizations: gradient checkpointing, 8-bit AdamW, configurable batch sizes
@@ -111,6 +93,14 @@ Connect the loaded model to one of the generator nodes:
 #### **Voice Design** (Requires `VoiceDesign` Model)
 - **instruct**: Describe the voice you want, e.g., *"A deep, resonant male voice, narrator style, calm and professional."*
 - **text**: The text to speak.
+
+#### **Instruct Selector** (Optional helper for Custom Voice & Voice Design)
+Use the **Qwen3-TTS Instruct Selector** node to pick instruct prompts from a built-in preset list instead of typing them manually.
+- **preset**: Choose from 28 presets labeled `[CV]` (for Custom Voice) or `[VD]` (for Voice Design).
+  - `[CV]` presets control emotion, pace, and style of an existing speaker voice.
+  - `[VD]` presets define a full voice profile including gender, age (20s–70s), tone, and use case.
+- **override**: (Optional) Type freely to override the selected preset with your own text.
+- Connect the output `instruct` STRING to the **instruct** input of Custom Voice or Voice Design nodes.
 
 #### **Voice Clone** (Requires `Base` Model)
 - **ref_audio**: Upload a reference audio file (1-10 seconds ideal, max 30s by default).

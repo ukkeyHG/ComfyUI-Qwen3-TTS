@@ -9,7 +9,8 @@ from .nodes import (
     Qwen3DatasetFromFolder,
     Qwen3DataPrep,
     Qwen3FineTune,
-    Qwen3AudioCompare
+    Qwen3AudioCompare,
+    Qwen3InstructSelector
 )
 
 NODE_CLASS_MAPPINGS = {
@@ -23,7 +24,8 @@ NODE_CLASS_MAPPINGS = {
     "Qwen3DatasetFromFolder": Qwen3DatasetFromFolder,
     "Qwen3DataPrep": Qwen3DataPrep,
     "Qwen3FineTune": Qwen3FineTune,
-    "Qwen3AudioCompare": Qwen3AudioCompare
+    "Qwen3AudioCompare": Qwen3AudioCompare,
+    "Qwen3InstructSelector": Qwen3InstructSelector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -37,7 +39,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Qwen3DatasetFromFolder": "Qwen3-TTS Dataset Maker",
     "Qwen3DataPrep": "Qwen3-TTS Data Prep",
     "Qwen3FineTune": "Qwen3-TTS Finetune",
-    "Qwen3AudioCompare": "Qwen3-TTS Audio Compare"
+    "Qwen3AudioCompare": "Qwen3-TTS Audio Compare",
+    "Qwen3InstructSelector": "Qwen3-TTS Instruct Selector",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

@@ -535,7 +535,12 @@ class Qwen3VoiceDesign:
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
         lang = language if language != "Auto" else None
-        
+
+        # Voice Design呼び出し前にtts_model_typeを動的にvoice_designに設定
+        if hasattr(model, "model") and hasattr(model.model, "tts_model_type"):
+            model.model.tts_model_type = "voice_design"
+            print("DEBUG: Set tts_model_type = voice_design for Voice Design generation", flush=True)
+
         try:
             wavs, sr = model.generate_voice_design(
                 text=text,
@@ -581,6 +586,11 @@ class Qwen3PromptMaker:
                 wav_data = wav_data[:max_samples]
                 audio_tuple = (wav_data, audio_sr)
         
+        # Prompt Maker呼び出し前にtts_model_typeを動的にbaseに設定
+        if hasattr(model, "model") and hasattr(model.model, "tts_model_type"):
+            model.model.tts_model_type = "base"
+            print("DEBUG: Set tts_model_type = base for Prompt Maker", flush=True)
+
         try:
             prompt = model.create_voice_clone_prompt(
                 ref_audio=audio_tuple,
@@ -588,8 +598,6 @@ class Qwen3PromptMaker:
             )
         except ValueError as e:
              msg = str(e)
-             # Assumption: create_voice_clone_prompt might also be restricted to Base models? 
-             # README doesn't explicitly restrict it but implies it's for cloning.
              if "does not support" in msg:
                  raise ValueError("Model Type Error: This model does not support creating voice clone prompts. Please load a 'Base' model.") from e
              raise e
@@ -1812,3 +1820,173 @@ Audio Details:
 
         print(report)
         return (report,)
+
+# ============================================================
+# Qwen3InstructSelector
+# ============================================================
+
+# --- プリセット定義 ---
+INSTRUCT_PRESETS = [
+    # =====================================================================
+    # [CV] = Qwen3CustomVoice 向け
+    #        既存スピーカーの話し方・感情・速度を制御する短いプロンプト
+    # [VD] = Qwen3VoiceDesign 向け
+    #        性別・年齢・音域・感情・用途を組み合わせた多次元の声デザイン
+    # =====================================================================
+
+    {"label": "(none)", "text": ""},
+
+    # ----------------------------------------------------------------
+    # [CV] 感情コントロール
+    # ----------------------------------------------------------------
+    {"label": "[CV] 感情: 非常に喜んで",
+     "text": "Very happy."},
+
+    {"label": "[CV] 感情: 怒りを込めて",
+     "text": "Speak in a very angry tone."},
+
+    {"label": "[CV] 感情: 悲しそうに",
+     "text": "Speak in a sad and melancholic tone."},
+
+    {"label": "[CV] 感情: 驚いたように・信じられない",
+     "text": "Speak in an incredulous tone, but with a hint of panic beginning to creep into your voice."},
+
+    {"label": "[CV] 感情: 恐怖・パニック",
+     "text": "Speak in a fearful tone, voice trembling with panic."},
+
+    {"label": "[CV] 感情: 穏やか・安心させる",
+     "text": "Speak in a calm and reassuring tone."},
+
+    {"label": "[CV] 感情: 興奮・熱狂",
+     "text": "Speak in an excited and enthusiastic tone, high energy."},
+
+    # ----------------------------------------------------------------
+    # [CV] 話し方・ペース
+    # ----------------------------------------------------------------
+    {"label": "[CV] ペース: ゆっくり丁寧に",
+     "text": "Speak slowly and clearly, with careful articulation."},
+
+    {"label": "[CV] ペース: 速く活発に",
+     "text": "Speak quickly and energetically, fast-paced delivery."},
+
+    {"label": "[CV] ペース: 強調しながら力強く",
+     "text": "Speak with strong emphasis and a powerful, authoritative tone."},
+
+    # ----------------------------------------------------------------
+    # [CV] シチュエーション・スタイル
+    # ----------------------------------------------------------------
+    {"label": "[CV] スタイル: ニュースアナウンサー",
+     "text": "Speak like a professional news announcer. Clear, neutral intonation, steady pace, authoritative."},
+
+    {"label": "[CV] スタイル: ドキュメンタリーナレーター",
+     "text": "Speak like a documentary narrator. Calm, measured pace, informative and engaging tone."},
+
+    {"label": "[CV] スタイル: 丁寧な接客",
+     "text": "Speak like a polite customer service representative. Warm, helpful, and professional tone."},
+
+    {"label": "[CV] スタイル: 子ども向け・やさしく",
+     "text": "Speak in a gentle, simple, and warm tone suitable for young children."},
+
+    {"label": "[CV] スタイル: ファッション・商品紹介",
+     "text": "Fast-paced with rising intonation, energetic and upbeat, suitable for fashion product promotion."},
+
+    # ----------------------------------------------------------------
+    # [VD] 女性ボイスデザイン
+    # ----------------------------------------------------------------
+    {"label": "[VD] 女性: 落ち着いた知的な30代（ナレーター）",
+     "text": "A gentle, intellectual female voice, around 30 years old, with a calm tone and clear articulation, suitable for audiobook narration."},
+
+    {"label": "[VD] 女性: 明るく活発な20代（接客・案内）",
+     "text": "A bright, cheerful female voice, around 25 years old, high-pitched and energetic, fast-paced delivery, suitable for customer service or announcements."},
+
+    {"label": "[VD] 女性: 温かく包容力のある40代（カウンセラー）",
+     "text": "A warm, mature female voice, around 40 years old, soft and reassuring tone, slow and steady pace, suitable for counseling or meditation guidance."},
+
+    {"label": "[VD] 女性: クールでプロフェッショナルな30代",
+     "text": "A composed, professional female voice, around 30 years old, crisp and clear, neutral intonation, suitable for business presentations or corporate narration."},
+
+    # ----------------------------------------------------------------
+    # [VD] 男性ボイスデザイン
+    # ----------------------------------------------------------------
+    {"label": "[VD] 男性: 深みのある中年（ニュース・ドキュメンタリー）",
+     "text": "A composed middle-aged male announcer voice, deep and rich baritone, steady speaking speed and clear articulation, suitable for news broadcasting or documentary commentary."},
+
+    {"label": "[VD] 男性: 若々しく自信に満ちた20代",
+     "text": "Male, around 22 years old, tenor range, confident and energetic tone, clear and upbeat delivery, suitable for commercial narration or sports commentary."},
+
+    {"label": "[VD] 男性: 穏やかで知的な40代（教育・解説）",
+     "text": "A calm, intellectual male voice, around 40 years old, warm baritone, measured pace with thoughtful pauses, suitable for educational content or explanatory narration."},
+
+    {"label": "[VD] 男性: シリアス・緊張感のある場面",
+     "text": "A serious, intense male voice, deep and forceful, with a sense of urgency and tension, suitable for dramatic narration or thriller scenes."},
+
+    # ----------------------------------------------------------------
+    # [VD] 高齢者ボイスデザイン
+    # ----------------------------------------------------------------
+    {"label": "[VD] 高齢女性: 温かいおばあちゃん（70代）",
+     "text": "A warm, elderly female voice, around 70 years old, soft and slightly husky, gentle and slow-paced with natural age texture, suitable for grandmother-like storytelling or nostalgic narration."},
+
+    {"label": "[VD] 高齢女性: 上品で落ち着いた60代",
+     "text": "A refined, dignified female voice, around 60 years old, slightly lower pitch with elegant intonation, calm and measured pace, suitable for graceful narration or wisdom-sharing content."},
+
+    {"label": "[VD] 高齢男性: 渋くて貫禄のある70代",
+     "text": "A gravelly, authoritative male voice, around 70 years old, deep and slightly raspy baritone, slow and deliberate pace, full of gravitas, suitable for veteran storytelling or historical narration."},
+
+    {"label": "[VD] 高齢男性: 穏やかで賢いおじいちゃん（65代）",
+     "text": "A gentle, wise elderly male voice, around 65 years old, warm and slightly husky, unhurried and calm delivery, suitable for grandfather-like narration or reflective storytelling."},
+]
+
+_INSTRUCT_LABELS = [p["label"] for p in INSTRUCT_PRESETS]
+_INSTRUCT_MAP    = {p["label"]: p["text"] for p in INSTRUCT_PRESETS}
+
+
+class Qwen3InstructSelector:
+    """
+    Instruct プリセットをセレクタで選択し、STRING として出力するノード。
+    Qwen3CustomVoice / Qwen3VoiceDesign の instruct 入力に接続して使用する。
+
+    - preset  : ドロップダウンでプリセットを選択
+    - override: テキスト欄。空欄なら preset の内容をそのまま出力。
+                何か入力すると override の内容で上書きされる。
+    """
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "preset": (
+                    _INSTRUCT_LABELS,
+                    {
+                        "default": _INSTRUCT_LABELS[0],
+                        "tooltip": "プリセットから instruct テキストを選択します。",
+                    },
+                ),
+            },
+            "optional": {
+                "override": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "tooltip": (
+                            "入力すると preset を無視してこのテキストを使用します。"
+                            "空欄の場合は preset が使われます。"
+                        ),
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("instruct",)
+    FUNCTION = "select"
+    CATEGORY = "Qwen3-TTS"
+
+    def select(self, preset: str, override: str = "") -> tuple:
+        if override.strip():
+            instruct = override.strip()
+            print(f"[Qwen3InstructSelector] override 使用: {instruct!r}")
+        else:
+            instruct = _INSTRUCT_MAP.get(preset, "")
+            print(f"[Qwen3InstructSelector] preset 使用: {preset!r} → {instruct!r}")
+        return (instruct,)

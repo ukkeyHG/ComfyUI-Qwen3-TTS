@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-08 (ukkeyHG fork)
+
+### Added
+- **New node: Qwen3-TTS Instruct Selector** for preset-based instruct input
+  - 28 built-in presets categorized by `[CV]` (Custom Voice) and `[VD]` (Voice Design)
+  - `[CV]` presets: emotion control (happy, angry, sad, fearful, etc.), pace, and style
+  - `[VD]` presets: multi-dimensional voice design including gender, age (20s–70s), tone, and use case
+  - `override` text field to freely edit or replace the selected preset
+  - Connect output `instruct` STRING directly to Custom Voice or Voice Design nodes
+
+### Fixed
+- Voice Design node now correctly switches `tts_model_type` to `"voice_design"` at generation time
+  - Fixes "Model Type Error" when using `local_model_path` with a non-VoiceDesign model path
+
+## [1.8.0] - 2026-03-07 (ukkeyHG fork)
+
+### Added
+- `temperature`, `top_k`, `top_p`, `repetition_penalty` parameters to Custom Voice and Voice Clone nodes
+  - `subtalker_*` parameters automatically mirror the main parameters for simplicity
+- Dynamic `tts_model_type` switching at generation time
+  - Custom Voice and Voice Clone can now both be used with the same fine-tuned model without conflicts
+  - Prompt Maker also supports fine-tuned models
+
+### Fixed
+- Fine-tuned model support for Voice Clone and Prompt Maker nodes
+  - `tts_model_type` is now switched dynamically at call time instead of being forced at load time
+- `safetensors` checkpoint loading support in Loader node
+  - Loader now detects `model.safetensors` first, then falls back to `pytorch_model.bin`
+  - Eliminates the need to convert `.safetensors` to `.bin` format (saves ~4GB disk space)
+  - Applies to both inference loading and training resume
+
 ## [1.7.0] - 2026-01-31
 
 ### Added
@@ -68,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `max_new_tokens` parameter for Voice Clone node to control generation length and prevent hangs
 - `ref_audio_max_seconds` parameter to auto-trim long reference audio (default: 30s)
 - Troubleshooting section in README for common issues
-- **New node: Qwen3-TTS Audio Compare** for evaluating fine-tuned models (speaker similarity, mel spectrogram distance, speaking rate)
+- **New node: Qwen3-TTS Audio Compare** for evaluating fine-tuned models
 - Resume training from checkpoints with `resume_training` parameter
 - Per-epoch checkpointing with automatic cleanup of intermediate checkpoints
 - 8-bit AdamW optimizer support via bitsandbytes for reduced VRAM usage
@@ -83,10 +114,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Reduced default `max_new_tokens` from 8192 to 2048 to prevent generation hangs
 - Reduced default learning rate from 2e-5 to 2e-6 for training stability
-- Updated documentation with generation hang mitigation tips and new fine-tuning features
 
 ### Fixed
-- Mitigated infinite generation loop issue when using long reference audio or generating long outputs
+- Mitigated infinite generation loop issue when using long reference audio
 - Fixed dtype parameter handling in fine-tuning
 - Fixed speaker embedding CPU conversion issue
 
@@ -99,14 +129,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exposed finetuning seed parameter for reproducible training
 - Resource cleanup for mixed workflows
 
-### Changed
-- Improved memory management when switching between inference and training
-
 ## [1.3.0] - 2026-01-24
 
 ### Changed
 - Updated model download management with improved caching and error handling
-- Enhanced README documentation
 
 ## [1.2.0] - 2026-01-24
 
@@ -116,23 +142,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-01-23
 
 ### Added
-- Fine-tuning support with dataset handling (`dataset.py`)
+- Fine-tuning support with dataset handling
 - Simple finetuning example workflow
 - MPS (Apple Silicon) device support
 
-### Changed
-- Use ComfyUI `model_management` for device detection
-- Updated transformers dependency warning
-- Updated requirements with safetensors
-
 ### Fixed
-- Project name in pyproject.toml to match repository naming convention
+- Project name in pyproject.toml
 
 ## [1.0.0] - 2026-01-22
 
 ### Added
 - Initial release
 - Qwen3-TTS model loader node
-- Text-to-speech generation node
 - Custom voice workflow configuration
 - Flash attention support with automatic fallback
